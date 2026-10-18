@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학급 자리배치표</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Noto+Sans+KR:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        .font-title {
+            font-family: 'Gowun Dodum', sans-serif;
+        }
+        
+        /* 칠판 질감 스타일 */
+        .chalkboard {
+            background: #1e3a29;
+            border: 8px solid #854d0e;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.7), 0 8px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        /* 책상 카드 및 애니메이션 */
+        .desk-card {
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+        .desk-card:hover {
+            transform: translateY(-2px);
+        }
+        .desk-card.selected {
+            border-color: #f59e0b !important;
+            background-color: #fef3c7 !important;
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.6);
+        }
+        .desk-card.dragging {
+            opacity: 0.5;
+            transform: scale(0.95);
+        }
+        
+        /* 커스텀 스크롤바 */
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        /* 인쇄 전용 스타일 (A4 용지 맞춤) */
+        @media print {
+            body {
+                background: white !important;
+                color: black !important;
+                padding: 0 !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-only {
+                display: block !important;
+            }
+            .print-container {
+                box-shadow: none !important;
+                border: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+            .chalkboard {
+                border-width: 4px !important;
+                background: #1e3a29 !important;
+                color: white !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .desk-card {
+                border-width: 1.5px !important;
+                border-color: #475569 !important;
+                box-shadow: none !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col justify-between p-3 sm:p-6 select-none">
+
+    <!-- 상단 헤더 (인쇄 시 숨김) -->
+    <header class="no-print max-w-6xl mx-auto w-full mb-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200 gap-4">
+            <div class="flex items-center gap-3">
+                <span class="text-3xl sm:text-4xl">🏫</span>
+                <div>
+                    <h1 class="text-2xl sm:text-3xl font-extrabold font-title text-slate-900 tracking-tight">우리 반 자리배치표</h1>
+                    <p class="text-xs sm:text-sm text-slate-500">담임 선생님을 위한 스마트 자리 배치 및 관리 도구</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2 self-end md:self-auto">
+                <button onclick="window.print()" class="bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold px-4 py-2.5 rounded-xl shadow transition flex items-center gap-2 text-sm sm:text-base">
+                    <span>🖨️</span>
+                    <span>배치표 인쇄</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 컨테이너 -->
+    <main class="max-w-6xl mx-auto w-full flex-1 flex flex-col gap-5">
+        
+        <!-- 컨트롤 패널 (설정 및 조작) -->
+        <section class="no-print bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200">
+            <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4 items-end">
+                
+                <!-- 분단 수 설정 -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">분단 수 (모둠)</label>
+                    <input type="number" id="groupCount" min="1" max="6" value="3" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-center focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <!-- 줄 수 설정 (행) -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">줄 수 (세로 깊이)</label>
+                    <input type="number" id="rowCount" min="1" max="10" value="4" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-center focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <!-- 분단당 책상 수 (열) -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">분단당 가로 책상</label>
+                    <input type="number" id="desksPerGroup" min="1" max="4" value="2" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-center focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <!-- 총 학생 수 -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">총 학생 수 (명)</label>
+                    <input type="number" id="studentCount" min="1" max="60" value="24" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-center focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <!-- 생성 / 섞기 버튼 -->
+                <div class="col-span-2 sm:col-span-4 lg:col-span-1 flex gap-2">
+                    <button onclick="applyGridConfig()" class="flex-1 bg-slate-800 hover:bg-slate-900 active:scale-95 text-white font-bold py-2.5 rounded-xl transition text-sm flex items-center justify-center gap-1">
+                        <span>⚙️</span>
+                        <span>판 만들기</span>
+                    </button>
+                    <button onclick="shuffleSeats()" class="flex-1 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-black py-2.5 rounded-xl shadow transition text-sm flex items-center justify-center gap-1">
+                        <span>🎲</span>
+                        <span>자리 섞기</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 안내 및 팁 -->
+            <div class="mt-3 pt-3 border-t border-slate-100 flex flex-wrap justify-between items-center text-xs text-slate-500 gap-2">
+                <div class="flex items-center gap-3 flex-wrap">
+                    <span class="flex items-center gap-1">💡 <b>자리 지정(주작):</b> 책상을 클릭하면 원하는 번호나 빈자리를 직접 지정할 수 있습니다.</span>
+                    <span class="flex items-center gap-1 text-indigo-600 font-medium">✨ 책상 2개를 연속 클릭하거나 드래그해도 자리가 교체됩니다.</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="clearSeats()" class="text-slate-400 hover:text-red-500 underline text-xs transition">번호 초기화</button>
+                    <span class="text-slate-300">|</span>
+                    <span id="saveStatusText" class="text-emerald-600 font-semibold">💾 브라우저 자동 저장됨</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 자리배치표 출력 영역 (인쇄 대상) -->
+        <section class="print-container bg-white rounded-3xl p-4 sm:p-8 shadow-sm border border-slate-200 flex flex-col items-center custom-scrollbar overflow-x-auto">
+            
+            <!-- 학급 타이틀 (인쇄할 때 잘 보이도록) -->
+            <div class="w-full text-center mb-4 hidden print-only">
+                <h2 class="text-2xl font-bold font-title">학급 자리배치표</h2>
+                <p class="text-xs text-slate-500 mt-1" id="printDate"></p>
+            </div>
+
+            <!-- 칠판 (Top Blackboard) -->
+            <div class="chalkboard w-full max-w-3xl rounded-2xl py-3 px-6 text-center text-amber-100 font-title font-extrabold text-lg sm:text-xl tracking-widest my-2 relative">
+                <span>[ 칠 판 (전면) ]</span>
+                <div class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-normal text-emerald-300/70 hidden sm:block">
+                    교탁 👨‍🏫
+                </div>
+            </div>
+
+            <!-- 책상 배치 그리드 컨테이너 -->
+            <div id="seatingGrid" class="mt-6 sm:mt-8 flex justify-center gap-4 sm:gap-8 min-w-max pb-4">
+                <!-- JavaScript를 통해 동적으로 생성됩니다 -->
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- 자리 수동 지정 (주작) 모달 팝업 -->
+    <div id="seatModal" class="no-print fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-100 text-center flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-150">
+            <div class="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center text-2xl font-bold">
+                🎯
+            </div>
+            <div>
+                <h3 class="text-lg font-extrabold text-slate-800" id="modalDeskTitle">책상 번호 수정</h3>
+                <p class="text-xs text-slate-500 mt-0.5">원하는 학생 번호를 지정하거나 비울 수 있습니다.</p>
+            </div>
+
+            <div class="w-full">
+                <label class="block text-xs font-bold text-slate-600 mb-1 text-left">학생 번호 지정 (1~<span id="maxStudentSpan">24</span>번)</label>
+                <div class="flex gap-2">
+                    <input type="number" id="modalStudentInput" min="1" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-base font-bold text-center focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+            </div>
+
+            <!-- 번호 목록 Quick Pick 영역 -->
+            <div class="w-full border-t border-slate-100 pt-3">
+                <div class="text-[11px] font-bold text-slate-400 mb-2 text-left">빠른 번호 선택:</div>
+                <div id="quickPickContainer" class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto custom-scrollbar p-1">
+                    <!-- JS로 번호 버튼들 동적 삽입 -->
+                </div>
+            </div>
+
+            <div class="flex w-full gap-2 pt-2 border-t border-slate-100">
+                <button onclick="setDeskEmpty()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition text-xs">
+                    빈자리로 변경
+                </button>
+                <button onclick="saveSeatModal()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl transition text-xs shadow">
+                    확인 및 배치
+                </button>
+            </div>
+            <button onclick="closeModal()" class="text-xs text-slate-400 hover:text-slate-600 underline mt-1">취소</button>
+        </div>
+    </div>
+
+    <!-- 푸터 (인쇄 시 숨김) -->
+    <footer class="no-print mt-6 text-center text-xs text-slate-400">
+        담임 교사를 돕는 스마트 학급 관리 파트너 • 설정 내용은 브라우저에 안전하게 자동 저장됩니다.
+    </footer>
+
+    <script>
+        // 자리배치 기본 상태 변수
+        let config = {
+            groupCount: 3,
+            rowCount: 4,
+            desksPerGroup: 2,
+            studentCount: 24
+        };
+
+        // 각 책상 위치의 학생 번호 배열 (1차원 배열)
+        let seatsData = [];
+
+        // 선택된 책상 인덱스 (자리 교체용 및 모달용)
+        let selectedIndex = null;
+        let activeModalIndex = null;
+        let draggedIndex = null;
+
+        // 로컬스토리지 키값
+        const STORAGE_KEY = 'teacher_seating_chart_data';
+
+        // 페이지 초기화
+        window.onload = function() {
+            loadSavedData();
+            updatePrintDate();
+        };
+
+        function updatePrintDate() {
+            const today = new Date();
+            const dateStr = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일 기준`;
+            const printDateEl = document.getElementById('printDate');
+            if(printDateEl) printDateEl.textContent = dateStr;
+        }
+
+        // 로컬스토리지에서 데이터 불러오기
+        function loadSavedData() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    config = parsed.config || config;
+                    seatsData = parsed.seatsData || [];
+                    
+                    // UI 입력 필드에 값 복원
+                    document.getElementById('groupCount').value = config.groupCount;
+                    document.getElementById('rowCount').value = config.rowCount;
+                    document.getElementById('desksPerGroup').value = config.desksPerGroup;
+                    document.getElementById('studentCount').value = config.studentCount;
+                } catch (e) {
+                    console.error("데이터 로드 실패", e);
+                }
+            }
+
+            // 배치표 생성 및 그리기
+            if (seatsData.length === 0) {
+                initSeatsData();
+            } else {
+                renderGrid();
+            }
+        }
+
+        // 설정 변경에 따른 새 판 초기화
+        function initSeatsData() {
+            const totalDesks = config.groupCount * config.rowCount * config.desksPerGroup;
+            seatsData = new Array(totalDesks).fill(null);
+            
+            // 학생 수만큼 기본 번호 순차 배치
+            for (let i = 0; i < Math.min(config.studentCount, totalDesks); i++) {
+                seatsData[i] = i + 1;
+            }
+            
+            saveData();
+            renderGrid();
+        }
+
+        // 브라우저 로컬스토리지에 저장
+        function saveData() {
+            const payload = {
+                config: config,
+                seatsData: seatsData
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+            
+            // 저장 상태 피드백 표시
+            const statusEl = document.getElementById('saveStatusText');
+            if (statusEl) {
+                statusEl.textContent = "💾 브라우저 자동 저장됨";
+                statusEl.classList.remove('opacity-0');
+                setTimeout(() => {
+                    statusEl.classList.add('opacity-0');
+                }, 2000);
+            }
+        }
+
+        // 설정 버튼 클릭 시 그리드 재구성
+        function applyGridConfig() {
+            const groupCount = parseInt(document.getElementById('groupCount').value) || 1;
+            const rowCount = parseInt(document.getElementById('rowCount').value) || 1;
+            const desksPerGroup = parseInt(document.getElementById('desksPerGroup').value) || 1;
+            const studentCount = parseInt(document.getElementById('studentCount').value) || 1;
+
+            config = {
+                groupCount: Math.min(Math.max(groupCount, 1), 6),
+                rowCount: Math.min(Math.max(rowCount, 1), 10),
+                desksPerGroup: Math.min(Math.max(desksPerGroup, 1), 4),
+                studentCount: Math.min(Math.max(studentCount, 1), 60)
+            };
+
+            initSeatsData();
+            showToast("새로운 자리 배치판이 생성되었습니다.");
+        }
+
+        // 무작위 자리 섞기 기능
+        function shuffleSeats() {
+            const totalDesks = config.groupCount * config.rowCount * config.desksPerGroup;
+            
+            // 1부터 studentCount까지의 번호 생성
+            let students = [];
+            for (let i = 1; i <= Math.min(config.studentCount, totalDesks); i++) {
+                students.push(i);
+            }
+
+            // 피셔-예이츠 셔플 알고리즘
+            for (let i = students.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [students[i], students[j]] = [students[j], students[i]];
+            }
+
+            // 전체 판 초기화 후 셔플된 번호 채우기
+            seatsData = new Array(totalDesks).fill(null);
+            for (let i = 0; i < students.length; i++) {
+                seatsData[i] = students[i];
+            }
+
+            selectedIndex = null;
+            saveData();
+            renderGrid();
+            showToast("🎲 자리가 무작위로 섞였습니다!");
+        }
+
+        // 번호 초기화 (빈 책상으로)
+        function clearSeats() {
+            if (confirm("모든 번호를 비우시겠습니까?")) {
+                seatsData = seatsData.map(() => null);
+                selectedIndex = null;
+                saveData();
+                renderGrid();
+                showToast("모든 번호가 초기화되었습니다.");
+            }
+        }
+
+        // 배치표 그리드 DOM 생성 함수
+        function renderGrid() {
+            const gridContainer = document.getElementById('seatingGrid');
+            gridContainer.innerHTML = '';
+
+            const { groupCount, rowCount, desksPerGroup } = config;
+
+            // 각 분단(Group) 생성
+            for (let g = 0; g < groupCount; g++) {
+                const groupEl = document.createElement('div');
+                groupEl.className = 'flex flex-col gap-3 sm:gap-4 bg-slate-50/80 p-3 rounded-2xl border border-slate-200/80 shadow-inner';
+
+                // 분단 라벨
+                const groupHeader = document.createElement('div');
+                groupHeader.className = 'text-center font-bold text-xs text-slate-500 pb-1 border-b border-slate-200';
+                groupHeader.textContent = `${g + 1} 분단`;
+                groupEl.appendChild(groupHeader);
+
+                // 줄(Row) 생성
+                for (let r = 0; r < rowCount; r++) {
+                    const rowEl = document.createElement('div');
+                    rowEl.className = 'flex gap-2 sm:gap-3';
+
+                    // 분단 내 책상(Desk) 생성
+                    for (let d = 0; d < desksPerGroup; d++) {
+                        // 1차원 배열에서의 책상 인덱스 계산
+                        const deskIndex = (r * groupCount * desksPerGroup) + (g * desksPerGroup) + d;
+                        const studentNum = seatsData[deskIndex];
+
+                        const deskCard = createDeskCard(deskIndex, studentNum);
+                        rowEl.appendChild(deskCard);
+                    }
+                    groupEl.appendChild(rowEl);
+                }
+
+                gridContainer.appendChild(groupEl);
+            }
+        }
+
+        // 개별 책상 엘리먼트 생성
+        function createDeskCard(index, studentNum) {
+            const card = document.createElement('div');
+            
+            const isSelected = selectedIndex === index;
+            const hasStudent = studentNum !== null && studentNum !== undefined;
+
+            card.className = `desk-card w-16 h-16 sm:w-20 sm:h-20 rounded-xl border-2 flex flex-col items-center justify-center cursor-pointer transition relative ${
+                isSelected 
+                    ? 'selected' 
+                    : hasStudent 
+                        ? 'bg-white border-slate-300 shadow-sm hover:border-indigo-400' 
+                        : 'bg-slate-100/70 border-dashed border-slate-300 text-slate-300'
+            }`;
+
+            card.draggable = true;
+
+            // 드래그 앤 드롭 이벤트
+            card.ondragstart = (e) => {
+                draggedIndex = index;
+                card.classList.add('dragging');
+                e.dataTransfer.setData('text/plain', index);
+            };
+
+            card.ondragend = () => {
+                card.classList.remove('dragging');
+            };
+
+            card.ondragover = (e) => {
+                e.preventDefault();
+            };
+
+            card.ondrop = (e) => {
+                e.preventDefault();
+                if (draggedIndex !== null && draggedIndex !== index) {
+                    swapSeats(draggedIndex, index);
+                    draggedIndex = null;
+                }
+            };
+
+            // 더블 클릭 또는 단일 클릭 핸들러 (더블 클릭 시 직접 지정 모달)
+            let clickTimer = null;
+            card.onclick = () => {
+                if (clickTimer === null) {
+                    clickTimer = setTimeout(() => {
+                        clickTimer = null;
+                        handleDeskClick(index);
+                    }, 220);
+                } else {
+                    clearTimeout(clickTimer);
+                    clickTimer = null;
+                    openDeskModal(index);
+                }
+            };
+
+            // 카드 내부 내용 구성
+            if (hasStudent) {
+                card.innerHTML = `
+                    <span class="text-[10px] sm:text-xs text-slate-400 font-semibold mb-0.5">책상 ${index + 1}</span>
+                    <span class="text-xl sm:text-2xl font-black text-slate-800 drop-shadow-sm">${studentNum}<span class="text-xs font-normal text-slate-500 ml-0.5">번</span></span>
+                    <button onclick="event.stopPropagation(); openDeskModal(${index})" class="no-print absolute top-1 right-1 text-[10px] text-slate-300 hover:text-indigo-600 transition p-0.5" title="번호 지정 (주작)">✏️</button>
+                `;
+            } else {
+                card.innerHTML = `
+                    <span class="text-[10px] text-slate-400 font-semibold mb-1">${index + 1}</span>
+                    <span class="text-xs text-slate-400">빈자리</span>
+                    <button onclick="event.stopPropagation(); openDeskModal(${index})" class="no-print absolute top-1 right-1 text-[10px] text-slate-300 hover:text-indigo-600 transition p-0.5" title="번호 지정 (주작)">✏️</button>
+                `;
+            }
+
+            return card;
+        }
+
+        // 지정 자리 팝업(주작 모달) 열기
+        function openDeskModal(index) {
+            activeModalIndex = index;
+            document.getElementById('modalDeskTitle').textContent = `책상 ${index + 1}번 자리 지정`;
+            document.getElementById('maxStudentSpan').textContent = config.studentCount;
+            
+            const currentNum = seatsData[index];
+            document.getElementById('modalStudentInput').value = currentNum || '';
+
+            // Quick Pick 번호 버튼 생성
+            const quickContainer = document.getElementById('quickPickContainer');
+            quickContainer.innerHTML = '';
+            for (let i = 1; i <= config.studentCount; i++) {
+                const btn = document.createElement('button');
+                const isOccupied = seatsData.includes(i) && seatsData[index] !== i;
+                btn.className = `px-2 py-1 text-xs rounded-lg font-bold transition ${
+                    seatsData[index] === i 
+                        ? 'bg-amber-500 text-slate-950 font-black' 
+                        : isOccupied 
+                            ? 'bg-slate-100 text-slate-400 border border-slate-200' 
+                            : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700'
+                }`;
+                btn.textContent = `${i}번`;
+                btn.onclick = () => {
+                    document.getElementById('modalStudentInput').value = i;
+                };
+                quickContainer.appendChild(btn);
+            }
+
+            const modal = document.getElementById('seatModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        // 모달 닫기
+        function closeModal() {
+            const modal = document.getElementById('seatModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            activeModalIndex = null;
+        }
+
+        // 빈자리 지정
+        function setDeskEmpty() {
+            if (activeModalIndex !== null) {
+                seatsData[activeModalIndex] = null;
+                saveData();
+                renderGrid();
+                closeModal();
+                showToast(`🎯 책상 ${activeModalIndex + 1}을(를) 빈자리로 지정했습니다.`);
+            }
+        }
+
+        // 특정 학생 번호 수동 배치
+        function saveSeatModal() {
+            if (activeModalIndex === null) return;
+            
+            const val = parseInt(document.getElementById('modalStudentInput').value);
+            if (isNaN(val) || val < 1) {
+                setDeskEmpty();
+                return;
+            }
+
+            // 이미 존재하는 번호면 해당 위치와 스왑
+            const existingIdx = seatsData.indexOf(val);
+            if (existingIdx !== -1 && existingIdx !== activeModalIndex) {
+                const oldVal = seatsData[activeModalIndex];
+                seatsData[existingIdx] = oldVal;
+                seatsData[activeModalIndex] = val;
+                showToast(`🎯 ${val}번 학생을 해당 자리에 배치하였습니다 (기존 위치와 스왑됨).`);
+            } else {
+                seatsData[activeModalIndex] = val;
+                showToast(`🎯 ${val}번 학생을 책상 ${activeModalIndex + 1}에 배치하였습니다.`);
+            }
+
+            saveData();
+            renderGrid();
+            closeModal();
+        }
+
+        // 책상 클릭 처리 (자리 교체 로직)
+        function handleDeskClick(index) {
+            if (selectedIndex === null) {
+                // 첫 번째 책상 선택
+                selectedIndex = index;
+                renderGrid();
+            } else if (selectedIndex === index) {
+                // 동일한 책상 클릭 시 지정 모달 호출
+                openDeskModal(index);
+                selectedIndex = null;
+            } else {
+                // 두 번째 책상 클릭 시 서로 자리 교체
+                swapSeats(selectedIndex, index);
+                selectedIndex = null;
+            }
+        }
+
+        // 두 자리의 번호 교체 함수
+        function swapSeats(idx1, idx2) {
+            const temp = seatsData[idx1];
+            seatsData[idx1] = seatsData[idx2];
+            seatsData[idx2] = temp;
+
+            saveData();
+            renderGrid();
+
+            const num1 = seatsData[idx2] ? `${seatsData[idx2]}번` : '빈자리';
+            const num2 = seatsData[idx1] ? `${seatsData[idx1]}번` : '빈자리';
+            showToast(`🔄 ${num1}와(과) ${num2} 자리가 교체되었습니다.`);
+        }
+
+        // 커스텀 토스트 메시지
+        function showToast(message) {
+            const existingToast = document.getElementById('toastMsg');
+            if (existingToast) existingToast.remove();
+
+            const toast = document.createElement('div');
+            toast.id = 'toastMsg';
+            toast.className = 'no-print fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white border border-slate-700 px-5 py-2.5 rounded-2xl shadow-2xl text-xs sm:text-sm font-bold z-50 transition-all transform duration-300 opacity-0 translate-y-4';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-0', 'translate-y-4');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-4');
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
+        }
+    </script>
+</body>
+</html>
